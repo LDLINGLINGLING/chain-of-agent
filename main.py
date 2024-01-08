@@ -30,7 +30,7 @@ import time
 import random
 from tools_introduction import call_plugin,tools
 from load_model import get_model
-from prompt_plamte import TOOL_DESC,PROMPT_REACT,check_action_inputs,prompt_task_split
+from prompt_plamte import TOOL_DESC,PROMPT_REACT,check_action_inputs,prompt_task_split,tool_examples
 import re
 
 
@@ -67,20 +67,20 @@ def _get_args():
                         help="是否使用lora模型进行任务分解且使用chain方式")#是否使用lora模型进行任务分解
     parser.add_argument("--execute_model_path",  default="/ai/ld/pretrain/Qwen-72B-Chat-Int4/",
                         help="执行模块基座模型")#执行模块基座模型
-    parser.add_argument("--execute_reflexion",  default=False,
+    parser.add_argument("--execute_reflexion",  default=True,
                         help="是否使用反思模式")#是否使用反思模式
     args = parser.parse_args()
     return args
 
 args=_get_args()
-assert args.prompt_task_split and  args.allparams_split_task_chain and args.lora_split_task_chain == False,'任务分解智能选择一种模式，不能并存'
-model,merge_model,embeding_model,tokenizer,merge_tokenizer=get_model(args)
+#assert args.prompt_task_split and  args.allparams_split_task_chain and args.lora_split_task_chain == False,'任务分解智能选择一种模式，不能并存'
+model,merge_model,embeding_model,tokenizer,merge_tokenizer=get_model(args)#MODEL是用来执行任务的，merge_model是用来规划任务的
 
 #主函数，里面包括了各种模式的任务分解和任务执行以及错误反思
 def llm_with_plugin(prompt: str, history, args,list_of_plugin_info=(),write_file=None,embeding_model=None,orgin_question=None):
     #chat_history = [(x['user'], x['bot']) for x in history] + [(prompt, '')]
     #实验阶段注意修改args.orgin_split_task_chain和task_switch两个参数
-    question=prompt
+    question=prompt#原始问题
 
 
     #以下在进行各种模式的任务分解
@@ -147,28 +147,32 @@ def llm_with_plugin(prompt: str, history, args,list_of_plugin_info=(),write_file
                                      stop_words=['Observation:', 'Observation:\n'])
             
         action, action_input, output = parse_latest_plugin_call(output)
-        
+
         if subtask and count>2*len(subtask)+3:
             break
-        if 'Final Answer' in output:  # 生成结束，并且不再需要调用插件
+        if 'Final Answer' in output and count>len(subtask):  # 生成结束，并且不再需要调用插件
             text += output
             print('#############结束了############')
             break
         if action:  # 需要调用插件
             # action、action_input 分别为需要调用的插件代号、输入参数
             # observation是插件返回的结果，为字符串
-            observation = call_plugin(action, action_input,write_file=write_file,embeding_model=embeding_model)
+            observation = call_plugin(action, action_input,write_file=write_file,embeding_model=embeding_model,model=model,tokenizer=tokenizer,incontext=text,subtask=subtask[count])
            
            #以下对工具选错和执行失败的进行反思处理
             if args.execute_reflexion:
                 if observation=='没有找到该工具':
                     output = text_completion(planning_prompt + text+'请注意{}这个工具不存在，不要使用这个工具'.format(action), stop_words=['Observation:', 'Observation:\n'])
                     action, action_input, output = parse_latest_plugin_call(output)
-                    observation = call_plugin(action, action_input,write_file=write_file,embeding_model=embeding_model)
+                    observation = call_plugin(action, action_input,write_file=write_file,embeding_model=embeding_model,model=model,tokenizer=tokenizer,incontext=text,subtask=subtask[count])
                 elif observation=='执行失败':
-                    action_input=check_action_inputs(question,action,list_of_plugin_info,text)
-                    #output = text_completion(planning_prompt + text+'注意{}这个工具使用{}执行失败'.format(action,action_input), stop_words=['Observation:', 'Observation:\n'])
-                    observation = call_plugin(action, action_input,write_file=write_file,embeding_model=embeding_model)
+                    print('工具{}的参数{}有误,重新思考'.format(action,action_input))
+                    # Referential=model.chat(tokenizer,text+'\n\n\n按照{武器A:直升机，位置B:[20,30]}的格式将以上文本中所有的代指A,B,C,D等字母指代的具体值输出成一个字典，不要输出无关的字符。',history=[])[0]
+                    output =text_completion(planning_prompt + text+'请注意{}这个参数有误，不能运行'.format(action_input), stop_words=['Observation:', 'Observation:\n'])
+                    action, action_input, output = parse_latest_plugin_call(output)
+
+                    # action_input=check_action_inputs(subtask[count]+'仅输出action_inputs,请将action_inputs中字母取值如下:'+Referential,action,list_of_plugin_info,text,model=model,tokenizer=tokenizer)
+                    observation = call_plugin(action, action_input,write_file=write_file,embeding_model=embeding_model,model=model,tokenizer=tokenizer,incontext=text,subtask=subtask[count])
             output += f'\nObservation: {observation}\nThought:'
             text+=output
         count+=1

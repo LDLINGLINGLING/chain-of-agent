@@ -141,19 +141,19 @@ tools = [
                 }
             ],
         },
-        {
-            'name_for_human': 'python计算器',
-            'name_for_model': 'python_math',
-            'description_for_model': 'python计算器可以通过python的eval()函数计算出输入的字符串表达式结果并返回,表达式仅包含数字、加减乘除、逻辑运算符',
-            'parameters': [
-                {
-                    'math_formulation': 'math_formulation',
-                    'description': '根据问题提炼出的python数学表达式,表达式仅包含数字、加减乘除、逻辑运算符',
-                    'required': True,
-                    'schema': {'type': 'string'},
-                }
-            ],
-        },
+        # {
+        #     'name_for_human': 'python计算器',
+        #     'name_for_model': 'python_math',
+        #     'description_for_model': 'python计算器可以通过python的eval()函数计算出输入的字符串表达式结果并返回,表达式仅包含数字、加减乘除、逻辑运算符',
+        #     'parameters': [
+        #         {
+        #             'math_formulation': 'math_formulation',
+        #             'description': '根据问题提炼出的python数学表达式,表达式仅包含数字、加减乘除、逻辑运算符',
+        #             'required': True,
+        #             'schema': {'type': 'string'},
+        #         }
+        #     ],
+        # },
         {
             'name_for_human': '武器发射按钮',
             'name_for_model': 'weapon_launch',
@@ -167,7 +167,19 @@ tools = [
                 }
             ],
         },
-      
+        {
+            'name_for_human': '数学计算',
+            'name_for_model': 'math_model',
+            'description_for_model': '使用大语言模型完成一系列的推理问题如基本的加减乘除、最大、最小计算',
+            'parameters': [
+                {
+                    'question': 'question',
+                    'description': '当前的问题，需要清楚的给足背景知识',
+                    'required': True,
+                    'schema': {'type': 'string'},
+                }
+            ],
+        },
         {
             'name_for_human': '距离计算器',
             'name_for_model': 'distance_calculation',
@@ -184,7 +196,7 @@ tools = [
     ]
 
 #以下是工具的实现部分，即调用工具后如何实现功能
-def call_plugin(plugin_name: str, plugin_args: str,write_file,embeding_model=None) -> str:
+def call_plugin(plugin_name: str, plugin_args: str,write_file,embeding_model=None,model=None,tokenizer=None,incontext=None,subtask=None):
     try:
 
         print("本次调用",plugin_name)
@@ -192,7 +204,6 @@ def call_plugin(plugin_name: str, plugin_args: str,write_file,embeding_model=Non
         if plugin_name == 'google_search':
             # 使用 SerpAPI 需要在这里填入您的 SERPAPI_API_KEY！
             search_query=json5.loads(plugin_args)['search_query']
-            
             #model.chat(tokenizer,task_split_prompt,history=[])
             return query_bing(search_query, max_tries=3,model=model,tokenizer=tokenizer)
         elif plugin_name == 'military_information_search':
@@ -222,6 +233,13 @@ def call_plugin(plugin_name: str, plugin_args: str,write_file,embeding_model=Non
             formatted_time = time.strftime(format_str)  
         
             return formatted_time
+        elif plugin_name=='math_model':
+            question=json5.loads(plugin_args)['question']
+            #result=model.chat(tokenizer,incontext,history=[])[0]
+            #result=model.chat(tokenizer,incontext+'基于以上信息回答：'+question,history=[])[0]
+            result=model.chat(tokenizer,incontext+'现在请你回答{}这个问题，并给出推理过程，最后给出答案。答案写成"Answer:答案"的格式'.format(subtask),history=[])[0]
+            result=result.split('Answer:')[1]
+            return result
         elif plugin_name=='map_search':#这个是地图信息的api
             map_dict={'我方直升机':[100,80],'敌直升机':[170,45],'我方指挥所':[0,2],'敌坦克':[20,13],'我方火箭炮':[100,120],'我方发射阵地1':[50,70],'我方发射阵地2':[150,170],"敌指挥中心": [70, 35],"敌反坦克导弹":[50,100],'我方坦克':[32,21]}
             import json
@@ -318,15 +336,16 @@ def call_plugin(plugin_name: str, plugin_args: str,write_file,embeding_model=Non
             import json
             args_dict = json.loads(plugin_args)
             math_formulation=args_dict['math_formulation']
+            
+            math_formulation=re.sub('km','',math_formulation)
+            math_formulation=re.sub('km/h','',math_formulation)
             try:
                 result=eval(math_formulation)
+
                 return "执行结果是{}".format(str(result))
             except:
-                math_formulation=re.sub('km','',math_formulation)
-                math_formulation=re.sub('km/h','',math_formulation)
-                pattern = re.compile(r"[^0-9/+*-/<>=%()]")
-                re.sub(pattern,'',math_formulation)
-                math_formulation=pattern.sub("", math_formulation)
+                pattern = re.compile(r"[^0-9/+*-/<>=%()](max|min|abs|pow|sqrt|exp)")
+                math_formulation=re.sub(pattern,'',math_formulation)
                 try:
                     result=eval(math_formulation)
 

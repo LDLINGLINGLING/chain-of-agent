@@ -94,7 +94,8 @@ Subtask: 使用邮箱向秦龙的地址A发送"你好"两个字
 问题:"""
 
 #以下是反思模块，用于检查输入参数是否错误
-def check_action_inputs(question,action,list_of_plugin_info,history=None):
+def check_action_inputs(question,action,list_of_plugin_info,history=None,model=None,tokenizer=None):
+    print('正在对{action}的参数进行反思'.format(action=action))
     check_prompt='''
     请按照以下示例，根据所选用action及其描述一些示例，选择正确的action_inputs参数：
     question_example:使用distance_calculation计算我方发射阵地1坐标A与敌坦克坐标B的距离\n
@@ -183,7 +184,7 @@ tool_examples={
     'QQ_Email':{'question':'发送当前明天早上八点开会到403644786@qq.com','action_input':'{"E-mail_address": "403644786@qq.com", "E-mail_content": "明天早上八点开会"}'},
     'image_gen':{'question':'画一幅可爱的小狗在草地上玩耍的图片','action_input':'{"prompt": "一只可爱的小狗在草地上玩耍"}'},
     'Situation_display':{'question':'显示我方指挥所100km范围内的态势图片','action_input': '{"coordinate": "[0,2]", "radio": "175.4"}'},
-    'python_math':{'question':'计算我方发射阵地1的300人和直升机的承载人数7计算需要的疏散次数C','action_input':'{"math_formulation": "300//7"}'},
+    'python_math':{'question':'计算我方发射阵地1的300人和直升机的承载人数7计算需要的疏散次数C','action_input':'{"math_formulation": "300//7+300%7>0"}'},
     'calendar':{'question':'获取当前时间','action_input':'{}'},
     'knowledge_graph':{'question':'查询直升机的克制武器','action_input':'{"weapon": "直升机", "attribute": "克制武器"}'},
     'weapon_launch':{'question':'使用火箭炮打击敌指挥中心','action_input':'{"weapon_and_coordinate": ["火箭炮", "敌指挥中心", [200, 100]]}'},
@@ -192,8 +193,8 @@ tool_examples={
 }
 if __name__=='__main__':
     from transformers import AutoTokenizer,AutoModelForCausalLM
-    model=AutoModelForCausalLM.from_pretrained('/ai/ld/pretrain/Qwen-14B-Chat/',  device_map="cuda:0",trust_remote_code=True).eval()
-    tokenizer = AutoTokenizer.from_pretrained('/ai/ld/pretrain/Qwen-14B-Chat/',trust_remote_code=True)
+    model=AutoModelForCausalLM.from_pretrained('/ai/ld/pretrain/Qwen-72B-Chat-Int4/',  device_map="cuda:0",trust_remote_code=True).eval()
+    tokenizer = AutoTokenizer.from_pretrained('/ai/ld/pretrain/Qwen-72B-Chat-Int4/',trust_remote_code=True)
     history='''Thought:最终任务是请告诉我，要对敌直升机进行打击，应选择何种武器，以及需要多少时间飞达？，执行顺序是是1使用knowledge_graph查询敌直升机的克制武器A。
 2使用map_search查询敌直升机的位置坐标B。
 3使用map_search查询直升机的克制武器A的位置坐标C。
@@ -220,6 +221,6 @@ Action: knowledge_graph
 Action Input: {"weapon": "对空导弹", "attribute": "速度"}
 Observation: 火箭炮的速度是:4500km/h
 '''
-    Referential=model.chat(tokenizer,history+'\n\n\n将以上文本中所有的代指A,B,C,D等字母指代的具体值输出',history=[])[0]
-    check_action_inputs('根据之前任务的结果，现在应该完成根据距离D和速度E计算飞行时间F。','python_math',tools,history)
+    Referential=model.chat(tokenizer,history+'\n\n\n按照{武器A:直升机，位置B:[20,30]}的格式将以上文本中所有的代指A,B,C,D等字母指代的具体值输出成一个字典格式',history=[])[0]
+    check_action_inputs('根据之前任务的结果，现在应该完成根据距离D和速度E计算飞行时间F。','python_math',tools,history,model,tokenizer)
     

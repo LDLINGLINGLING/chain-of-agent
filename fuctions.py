@@ -5,6 +5,7 @@ from rank_bm25 import BM25Okapi
 import openai
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 from bing_search import *
 
 def gpt_35_api_stream(messages: list):
@@ -51,8 +52,14 @@ def bm25(query, corpus,model=None):
     if max(similarities)<0.3:
         return '没有相关消息'
      # 找到最接近的文本
-    closest_index = similarities.argmax()
-    closest_text = corpus[closest_index]
+    sorted_indices = list(np.argsort(similarities)[::-1])
+    #closest_index = similarities.argmax()
+    retrival_list = [corpus[i] for i in sorted_indices[0:5]]
+    bm = fastbm25(retrival_list)
+    try:
+        closest_text=bm.top_k_sentence(query)[0][0]
+    except:
+        closest_text=retrival_list[0]
     return closest_text
 #获取送入子任务检测的规范格式子任务
 def get_check_text(sub_task_list):
@@ -115,3 +122,5 @@ def distance(query,map_dict):#计算距离
             distance_dict[weapon]=str(round(math.sqrt((float(query_coordinate[0])-float(item[0]))**2+(float(query_coordinate[1])-float(item[1]))**2),1))+'km'
     return [query,distance_dict]
 
+if __name__=='__main__':
+    bm25('装备',list({'飞行高度':'0.3km以内','携带武器':'火箭弹','克制武器':'对空导弹','重量':'3000kg',"速度":"100km/h","射程":"2km",'适应场景':'空战','续航':'500km','满载人数':'7人','承载重量':'10000kg','续航里程':'1000km'}.keys()))
